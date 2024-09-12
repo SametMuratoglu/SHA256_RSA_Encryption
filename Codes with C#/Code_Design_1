@@ -1,0 +1,164 @@
+using System;
+using System.IO;
+using System.Security.Cryptography;
+using System.Text;
+using System.Windows.Forms;
+
+namespace SHA256_RSA
+{
+    public partial class Form1 : Form
+    {
+        string _publicKeyXml = "<RSAKeyValue><Modulus>skWe6qhpFGOE3lTe4fa0UyNqWiSmY/Is/7nJDkDzX4fCYJ6r0/uR1MnNYKwJRN2yAmqxqarkw3MuiqZ4QNmU8XDtTXiGZlLd0FyaXDx0vIWhu5yUp8BZNsR3ccfmziC81BvH9rmc85qEuAsQXOk8eV3LSFWsRnMR6XnNu11fn2E=</Modulus><Exponent>AQAB</Exponent></RSAKeyValue>";
+
+        private string previousHash;
+        private string plainText;
+        
+
+        public Form1()
+        {
+            InitializeComponent();
+        }
+
+
+
+        public string NoCommentLine(string filePath)
+        {
+            string[] lines = File.ReadAllLines(filePath);
+
+            StringBuilder nonCommentLines = new StringBuilder();
+
+            bool foundComment = false;
+
+            foreach (string line in lines)
+            {
+                if (!line.Trim().StartsWith("//"))
+                {
+                    nonCommentLines.AppendLine(line);
+                }
+                else
+                {
+                    foundComment = true;
+                }
+            }
+
+            if (foundComment)
+            {
+                int linesToRemove = 2; // İstenen satır sayısı
+                for (int i = 0; i < linesToRemove; i++)
+                {
+                    int lastLineIndex = nonCommentLines.ToString().LastIndexOf(Environment.NewLine);
+                    if (lastLineIndex >= 0)
+                    {
+                        nonCommentLines.Remove(lastLineIndex, nonCommentLines.Length - lastLineIndex);
+                    }
+                }
+            }
+
+            return nonCommentLines.ToString();
+        }
+
+        private void btn_encrypt_Click(object sender, EventArgs e)
+        {
+            using (RSACryptoServiceProvider rsa = new RSACryptoServiceProvider())
+            {
+                rsa.FromXmlString(_publicKeyXml);
+
+                if (!string.IsNullOrEmpty(txt_hash.Text))
+                {
+                    plainText = txt_hash.Text;
+
+                    if (plainText != previousHash)
+                    {
+                        byte[] encryptedData = rsa.Encrypt(Encoding.UTF8.GetBytes(plainText), RSAEncryptionPadding.Pkcs1);
+                        string cipherText = Convert.ToBase64String(encryptedData);
+                        txt_chiper.Text = cipherText;
+
+                        previousHash = plainText;
+                    }
+                }
+                else
+                {
+                    MessageBox.Show("Öncelikle bir hash yaratın!");
+                }
+            }
+        }
+
+        public void btn_open_file_Click(object sender, EventArgs e)
+        {
+            OpenFileDialog openFileDialog = new OpenFileDialog();
+            openFileDialog.Filter = "Text Files|*.txt";
+            if (openFileDialog.ShowDialog() == DialogResult.OK)
+            {
+                string FilePath = openFileDialog.FileName;
+
+                if (File.Exists(FilePath))
+                {
+                    string NewFilePath = NoCommentLine(FilePath);    // Uygulama her açıldığında txt dosyasında şifre varsa silinmesi sağlanıyor...
+                    string FileContent = NewFilePath;
+                    txt_file.Text = FileContent;
+                }
+                else
+                {
+                    MessageBox.Show("Dosya bulunamadı.");
+                }
+            }
+        }
+
+        private void btn_hash_Click(object sender, EventArgs e)
+        {
+            string metin = txt_file.Text;
+            using (SHA256 sha256 = SHA256.Create())
+            {
+                byte[] metinBytes = Encoding.UTF8.GetBytes(metin);
+                byte[] hashBytes = sha256.ComputeHash(metinBytes);
+
+                StringBuilder hashBuilder = new StringBuilder();
+                foreach (byte b in hashBytes)
+                {
+                    hashBuilder.Append(b.ToString("x2"));
+                }
+                txt_hash.Text = hashBuilder.ToString();
+               
+            }
+        }
+
+        private void btn_Save_Click(object sender, EventArgs e)
+        {
+            if (!string.IsNullOrEmpty(txt_chiper.Text))
+            {
+                OpenFileDialog openFileDialog = new OpenFileDialog();
+                openFileDialog.Filter = "Text Files|*.txt";
+
+                if (openFileDialog.ShowDialog() == DialogResult.OK)
+                {
+                    string FilePath = openFileDialog.FileName;
+
+                    if (File.Exists(FilePath))
+                    {
+
+                        string existingContent = NoCommentLine(FilePath);
+                        string newContent = existingContent + Environment.NewLine + Environment.NewLine + "//" + txt_chiper.Text + "//";
+
+                        using (StreamWriter writer = new StreamWriter(FilePath))
+                        {
+                            writer.Write(newContent);
+                        }
+
+                        MessageBox.Show("Şifrelenmiş metin dosyaya eklendi.");
+
+                        System.Diagnostics.Process.Start(FilePath);
+                    }
+                    else
+                    {
+                        MessageBox.Show("Dosya bulunamadı.");
+                    }
+                }
+            }
+            else
+            {
+                MessageBox.Show("Şifrelenmiş metin bulunmuyor.");
+            }
+        }
+
+    }
+}
